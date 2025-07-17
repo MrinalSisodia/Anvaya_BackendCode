@@ -40,25 +40,50 @@ app.post('/leads', async (req, res) => {
       priority
     } = req.body;
 
-    const agentExists = await SalesAgent.findById(salesAgent);
+    if (typeof name !== 'string') {
+      return res.status(400).json({ error: "Invalid input: 'name' must be a string" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(salesAgent)) {
+      return res.status(400).json({ error: "Invalid input: 'salesAgent' must be a valid ObjectId" });
+    }
+
+    if (!Number.isInteger(timeToClose) || timeToClose <= 0) {
+      return res.status(400).json({ error: "Invalid input: 'timeToClose' must be a positive integer" });
+    }
+
+    // Wrap this in try-catch to catch casting errors
+    let agentExists;
+    try {
+      agentExists = await SalesAgent.findById(salesAgent);
+    } catch (err) {
+      if (err.name === 'CastError' && err.kind === 'ObjectId') {
+        return res.status(400).json({ error: "Invalid input: 'salesAgent' must be a valid ObjectId" });
+      }
+      throw err;
+    }
+
     if (!agentExists) {
       return res.status(404).json({ error: `Sales agent with ID '${salesAgent}' not found.` });
     }
 
     const leadData = { name, source, salesAgent, status, tags, timeToClose, priority };
     const newLead = await createLead(leadData);
-
     const populatedLead = await newLead.populate('salesAgent', 'id name');
-
     res.status(201).json(populatedLead);
 
   } catch (err) {
+    console.error('Caught Error:', err); // Debugging line
+
     if (err.name === 'ValidationError') {
-     const messages = Object.values(err.errors).map(e => e.message);
-return res.status(400).json({ error: `Invalid input`, details: messages });
+      const messages = Object.values(err.errors).map(e => e.message);
+      return res.status(400).json({ error: 'Invalid input', details: messages });
     }
 
-    console.error(err);
+    if (err.name === 'CastError' && err.kind === 'ObjectId') {
+      return res.status(400).json({ error: `Invalid input: '${err.path}' must be a valid ObjectId` });
+    }
+
     res.status(500).json({ error: 'Server error' });
   }
 });
