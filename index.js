@@ -2,80 +2,31 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const { initializeDatabase } = require("./db.connect");
-const { Lead, LEAD_ENUMS } = require("./models/LeadModel");
+const Lead = require("./models/LeadModel");
+const Comment = require("./models/CommentModel");
 const SalesAgent = require("./models/SalesAgentModel");
-
-const app = express();
-app.use(express.json());
-
-app.use(cors({ origin: "*", credentials: true, optionSuccessStatus: 200 }));
+const validateLeadInput = require("./validateLeadInput");
 
 initializeDatabase();
+const app = express();
+app.use(express.json());
+app.use(cors());
 
-// --- Helper Functions ---
-
-async function createLead(newLead) {
-  const lead = new Lead(newLead);
-  return await lead.save();
-}
-
-async function createSalesAgent(newAgent) {
-  const agent = new SalesAgent(newAgent);
-  return await agent.save();
-}
-
-async function readAllAgents() {
-  return await SalesAgent.find();
-}
-
-// --- Routes ---
-
-// Create Lead
-app.post("/leads", async (req, res) => {
+// --- Create Lead ---
+app.post("/leads", validateLeadInput, async (req, res) => {
   try {
-    const { name, source, salesAgent, status, tags, timeToClose, priority } = req.body;
+    const newLead = new Lead(req.body);
+    const savedLead = await newLead.save();
 
-
-    if (typeof name !== "string") {
-      return res.status(400).json({ error: "Invalid input: 'name' must be a string" });
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(salesAgent)) {
-      return res.status(400).json({ error: "Invalid input: 'salesAgent' must be a valid ObjectId" });
-    }
-
-    if (!Number.isInteger(timeToClose) || timeToClose <= 0) {
-      return res.status(400).json({ error: "Invalid input: 'timeToClose' must be a positive integer" });
-    }
-
-    
-    const agentExists = await SalesAgent.findById(salesAgent);
-    if (!agentExists) {
-      return res.status(404).json({ error: `Sales agent with ID '${salesAgent}' not found.` });
-    }
-
-    const leadData = { name, source, salesAgent, status, tags, timeToClose, priority };
-    const newLead = await createLead(leadData);
-    const populatedLead = await newLead.populate("salesAgent", "id name");
+    const populatedLead = await savedLead.populate("salesAgent", "_id name");
     res.status(201).json(populatedLead);
-
   } catch (err) {
-    console.error("Caught Error:", err);
-
-    if (err.name === "ValidationError") {
-      const messages = Object.values(err.errors).map((e) => e.message);
-      return res.status(400).json({ error: "Invalid input", details: messages });
-    }
-
-    if (err.name === "CastError" && err.kind === "ObjectId") {
-      return res.status(400).json({ error: `Invalid input: '${err.path}' must be a valid ObjectId` });
-    }
-
+    console.error("Error creating lead:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
 
-// Get Leads with optional filters
+// --- Get Leads with Query Filters ---
 app.get("/leads", async (req, res) => {
   try {
     const { salesAgent, status, tags, source } = req.query;
@@ -83,64 +34,216 @@ app.get("/leads", async (req, res) => {
 
     if (salesAgent) {
       if (!mongoose.Types.ObjectId.isValid(salesAgent)) {
-        return res.status(400).json({ error: "Invalid salesAgent ID" });
+        return res.status(400).json({
+          error: "Invalid input: 'salesAgent' must be a valid ObjectId",
+        });
       }
       query.salesAgent = salesAgent;
     }
 
-    if (status && !LEAD_ENUMS.STATUSES.includes(status)) {
-      return res.status(400).json({
-        error: `Invalid input: 'status' must be one of ${JSON.stringify(LEAD_ENUMS.STATUSES)}`,
-      });
+    if (status) {
+      query.status = status;
     }
-    if (status) query.status = status;
 
-    if (source && !LEAD_ENUMS.SOURCES.includes(source)) {
-      return res.status(400).json({
-        error: `Invalid input: 'source' must be one of ${JSON.stringify(LEAD_ENUMS.SOURCES)}`,
-      });
+    if (source) {
+      query.source = source;
     }
-    if (source) query.source = source;
 
     if (tags) {
-      const tagArray = tags.split(",").map((tag) => tag.trim());
-      query.tags = { $in: tagArray };
+      const tagsArray = Array.isArray(tags)
+        ? tags
+        : typeof tags === "string"
+        ? tags.split(",")
+        : [];
+      query.tags = { $all: tagsArray };
     }
 
-    const leads = await Lead.find(query)
-      .populate("salesAgent", "id name")
-      .sort({ createdAt: -1 });
-
+    const leads = await Lead.find(query).populate("salesAgent", "_id name");
     res.status(200).json(leads);
-  } catch (error) {
-    console.error("Error fetching leads:", error);
-    res.status(500).json({ error: "Failed to fetch leads" });
+  } catch (err) {
+    console.error("Error fetching leads:", err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-// Create Sales Agent
+// --- Update Lead ---
+app.put("/leads/:id", validateLeadInput, async (req, res) => {
+  const { id } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res
+      .status(400)
+      .json({ error: "'id' must be a valid Lead Id" });
+  }
+
+  try {
+    const updatedLead = await Lead.findByIdAndUpdate(id, req.body, {
+      new: true,
+      runValidators: true,
+    }).populate("salesAgent", "_id name");
+
+    if (!updatedLead) {
+      return res
+        .status(404)
+        .json({ error: `Lead with ID '${id}' not found.` });
+    }
+
+    res.status(200).json(updatedLead);
+  } catch (err) {
+    console.error("Error updating lead:", err);
+    res.status(500).json({ error: "Failed to update lead." });
+  }
+});
+
+// --- Delete Lead ---
+app.delete("/leads/:id", async (req, res) => {
+  const { id } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res
+      .status(400)
+      .json({ error: "'id' must be a valid Lead Id" });
+  }
+
+  try {
+    const deletedLead = await Lead.findByIdAndDelete(id);
+
+    if (!deletedLead) {
+      return res.status(404).json({
+        error: `Lead with ID '${id}' not found.`,
+      });
+    }
+
+    res.status(200).json({ message: "Lead deleted successfully." });
+  } catch (err) {
+    console.error("Error deleting lead:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// --- Create Sales Agent ---
+const createSalesAgent = async (data) => {
+  const newAgent = new SalesAgent(data);
+  return await newAgent.save();
+};
+
 app.post("/agents", async (req, res) => {
   try {
     const newAgent = await createSalesAgent(req.body);
-    res.status(201).json({ message: "Sales Agent added to database.", agent: newAgent });
+    res.status(201).json({
+      message: "Sales Agent added to database.",
+      agent: newAgent,
+    });
   } catch (error) {
+    console.error("Error creating agent:", error);
     res.status(500).json({ error: "Failed to add Sales Agent." });
   }
 });
 
-// Get All Agents
-app.get("/agents", async (req, res) => {
+// --- Get All Sales Agents ---
+app.get("/sales-agents", async (req, res) => {
   try {
-    const agents = await readAllAgents();
-    res.status(200).json({ agents });
-  } catch (error) {
-    console.error("Error fetching agents:", error);
-    res.status(500).json({ error: "Failed to fetch agents." });
+    const agents = await SalesAgent.find({}, "_id name");
+    res.status(200).json(agents);
+  } catch (err) {
+    console.error("Error fetching sales agents:", err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-// --- Server Start ---
-const PORT = 3000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+
+//Add comment to lead 
+app.post("/leads/:id/comments", async (req, res) => {
+  const { id: leadId } = req.params;
+  const { commentText } = req.body;
+
+  if (!commentText || typeof commentText !== "string") {
+    return res.status(400).json({
+      error: "Invalid input: 'commentText' is required and must be a string.",
+    });
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(leadId)) {
+    return res.status(400).json({ error: "'id' must be a valid Lead Id" });
+  }
+
+  try {
+    const lead = await Lead.findById(leadId).populate("salesAgent", "name");
+    if (!lead) {
+      return res.status(404).json({
+        error: `Lead with ID '${leadId}' not found.`,
+      });
+    }
+
+    if (!lead.salesAgent || !lead.salesAgent._id) {
+      return res.status(400).json({
+        error: `Lead with ID '${leadId}' has no assigned sales agent.`,
+      });
+    }
+
+    const newComment = new Comment({
+      lead: leadId,
+      author: lead.salesAgent._id,
+      commentText,
+    });
+
+    const savedComment = await newComment.save();
+    await savedComment.populate("author", "name");
+
+    res.status(201).json({
+      id: savedComment._id,
+      commentText: savedComment.commentText,
+      author: savedComment.author.name,
+      createdAt: savedComment.createdAt,
+    });
+  } catch (err) {
+    console.error("Error adding comment:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
+app.get("/leads/:id/comments", async (req, res) => {
+  const { id: leadId } = req.params;
+
+  // Validate lead ID
+  if (!mongoose.Types.ObjectId.isValid(leadId)) {
+    return res.status(400).json({ error: "'id' must be a valid Lead Id" });
+  }
+
+  try {
+    const leadExists = await Lead.findById(leadId);
+    if (!leadExists) {
+      return res.status(404).json({
+        error: `Lead with ID '${leadId}' not found.`,
+      });
+    }
+
+    const comments = await Comment.find({ lead: leadId })
+      .populate("author", "name")
+      .sort({ createdAt: 1 });
+
+
+    const formattedComments = comments.map((comment) => ({
+      id: comment._id,
+      commentText: comment.commentText,
+      author: comment.author?.name || "Unknown",
+      createdAt: comment.createdAt,
+    }));
+
+    res.status(200).json(formattedComments);
+  } catch (err) {
+    console.error("Error fetching comments:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
+
+app.get("/", (req, res) => {
+  res.send("Lead Management API is running");
+});
+
+app.listen(3000, () => {
+  console.log("Server running on port 3000");
 });

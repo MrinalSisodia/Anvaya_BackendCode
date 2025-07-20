@@ -68,3 +68,13 @@ catch casting errors(Catch invalid ObjectId formats (not parseable by Mongo))
   }
 });
 ```
+
+
+## VALIDATE INPUT
+- When a request hits POST /leads, Express first runs validateLeadInput(req, res, next)
+
+- If validation fails, it returns a 400/404 error response early
+
+- If validation passes, it calls next() → allowing the handler to run
+
+- Then your async (req, res) => {...} part creates and returns the lead

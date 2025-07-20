@@ -55,13 +55,6 @@ leadSchema.pre('save', function (next) {
 
 const Lead = mongoose.model('Lead', leadSchema);
 
-const LEAD_ENUMS = {
-  STATUSES: leadSchema.path('status').enumValues,
-  SOURCES: leadSchema.path('source').enumValues,
-  PRIORITIES: leadSchema.path('priority').enumValues,
-};
 
-module.exports = {
-  Lead,
-  LEAD_ENUMS,
-};
+module.exports = Lead;
+
