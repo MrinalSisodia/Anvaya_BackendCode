@@ -190,17 +190,25 @@ app.post("/leads/:id/comments", async (req, res) => {
     const savedComment = await newComment.save();
     await savedComment.populate("author", "name");
 
-    res.status(201).json({
-      id: savedComment._id,
-      commentText: savedComment.commentText,
-      author: savedComment.author.name,
-      createdAt: savedComment.createdAt,
-    });
+    // 🔁 Fetch and return all updated comments
+    const allComments = await Comment.find({ lead: leadId })
+      .populate("author", "name")
+      .sort({ createdAt: 1 });
+
+    const formattedComments = allComments.map((comment) => ({
+      id: comment._id,
+      commentText: comment.commentText,
+      author: comment.author?.name || "Unknown",
+      createdAt: comment.createdAt,
+    }));
+
+    res.status(200).json(formattedComments);
   } catch (err) {
     console.error("Error adding comment:", err);
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 
 app.get("/leads/:id/comments", async (req, res) => {
