@@ -15,8 +15,8 @@ app.use(cors());
 
 app.get("/tags", async (req, res) => {
   try {
-    const tags = await Tag.find({}, "name"); // only fetch 'name' field
-    res.json(tags.map((tag) => tag.name));   // return plain string array
+    const tags = await Tag.find({}, "name"); 
+    res.json(tags.map((tag) => tag.name));  
   } catch (err) {
     console.error("Error fetching tags:", err);
     res.status(500).json({ error: "Server error" });
@@ -44,13 +44,22 @@ app.get("/leads", async (req, res) => {
     const query = {};
 
     if (salesAgent) {
-      if (!mongoose.Types.ObjectId.isValid(salesAgent)) {
-        return res.status(400).json({
-          error: "Invalid input: 'salesAgent' must be a valid ObjectId",
-        });
-      }
-      query.salesAgent = salesAgent;
-    }
+  const agentArray = Array.isArray(salesAgent)
+    ? salesAgent
+    : typeof salesAgent === "string"
+    ? salesAgent.split(",")
+    : [];
+
+  const invalidAgentId = agentArray.find(id => !mongoose.Types.ObjectId.isValid(id));
+  if (invalidAgentId) {
+    return res.status(400).json({
+      error: "Invalid input: All 'salesAgent' values must be valid ObjectIds",
+    });
+  }
+
+  query.salesAgent = { $in: agentArray };
+}
+
 
     if (status) {
       query.status = status;
@@ -138,7 +147,7 @@ const createSalesAgent = async (data) => {
   return await newAgent.save();
 };
 
-app.post("/agents", async (req, res) => {
+app.post("/sales-agents", async (req, res) => {
   try {
     const newAgent = await createSalesAgent(req.body);
     res.status(201).json({

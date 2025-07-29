@@ -11,11 +11,13 @@ const leadSchema = new mongoose.Schema({
     required: [true, 'Lead source is required'],
     enum: ['Website', 'Referral', 'Cold Call', 'Advertisement', 'Email', 'Other'],
   },
-  salesAgent: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'SalesAgent', 
-    required: [true, 'Sales Agent is required'],
-  },
+ salesAgent: {
+  type: [mongoose.Schema.Types.ObjectId],
+  ref: 'SalesAgent',
+  required: [true, 'At least one sales agent is required'],
+  validate: [array => array.length > 0, 'At least one sales agent is required'],
+},
+
   status: {
     type: String,
     required: true,
