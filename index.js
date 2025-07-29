@@ -6,11 +6,22 @@ const Lead = require("./models/LeadModel");
 const Comment = require("./models/CommentModel");
 const SalesAgent = require("./models/SalesAgentModel");
 const validateLeadInput = require("./validateLeadInput");
+const Tag = require("./models/TagModel");
 
 initializeDatabase();
 const app = express();
 app.use(express.json());
 app.use(cors());
+
+app.get("/tags", async (req, res) => {
+  try {
+    const tags = await Tag.find({}, "name"); // only fetch 'name' field
+    res.json(tags.map((tag) => tag.name));   // return plain string array
+  } catch (err) {
+    console.error("Error fetching tags:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 // --- Create Lead ---
 app.post("/leads", validateLeadInput, async (req, res) => {
