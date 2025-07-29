@@ -53,9 +53,15 @@ const validateLeadInput = (req, res, next) => {
     return res.status(400).json({ error: "Invalid input: 'timeToClose' must be a positive integer" });
   }
 
-  if (!mongoose.Types.ObjectId.isValid(salesAgent)) {
-    return res.status(400).json({ error: "Invalid input: 'salesAgent' must be a valid ObjectId" });
-  }
+if (
+  !Array.isArray(salesAgent) ||
+  salesAgent.length === 0 ||
+  salesAgent.some(id => !mongoose.Types.ObjectId.isValid(id))
+) {
+  return res.status(400).json({
+    error: "Invalid input: 'salesAgent' must be a non-empty array of valid ObjectIds"
+  });
+}
 
   next();
 };
