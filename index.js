@@ -175,11 +175,18 @@ app.get("/sales-agents", async (req, res) => {
 //Add comment to lead 
 app.post("/leads/:id/comments", async (req, res) => {
   const { id: leadId } = req.params;
-  const { commentText } = req.body;
+  const { commentText, agentId } = req.body;
 
+  // Validate input
   if (!commentText || typeof commentText !== "string") {
     return res.status(400).json({
       error: "Invalid input: 'commentText' is required and must be a string.",
+    });
+  }
+
+  if (!agentId || !mongoose.Types.ObjectId.isValid(agentId)) {
+    return res.status(400).json({
+      error: "Invalid input: 'agentId' is required and must be a valid ObjectId.",
     });
   }
 
@@ -190,20 +197,21 @@ app.post("/leads/:id/comments", async (req, res) => {
   try {
     const lead = await Lead.findById(leadId).populate("salesAgent", "name");
     if (!lead) {
-      return res.status(404).json({
-        error: `Lead with ID '${leadId}' not found.`,
+      return res.status(404).json({ error: `Lead with ID '${leadId}' not found.` });
+    }
+
+    // Check if agentId is actually assigned to the lead
+    const isAssigned = lead.salesAgent.some((agent) => agent._id.equals(agentId));
+    if (!isAssigned) {
+      return res.status(403).json({
+        error: "This agent is not assigned to this lead.",
       });
     }
 
-    if (!lead.salesAgent || !lead.salesAgent._id) {
-      return res.status(400).json({
-        error: `Lead with ID '${leadId}' has no assigned sales agent.`,
-      });
-    }
-
+    // Create new comment with selected agent as author
     const newComment = new Comment({
       lead: leadId,
-      author: lead.salesAgent._id,
+      author: agentId,
       commentText,
     });
 
@@ -228,6 +236,7 @@ app.post("/leads/:id/comments", async (req, res) => {
     res.status(500).json({ error: "Server error" });
   }
 });
+
 
 
 
