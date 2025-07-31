@@ -10,6 +10,7 @@ const salesAgentSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Sales Agent email is required'],
     unique: true,  // Email must be unique across agents
+    match: [/.+@.+\..+/, "Invalid email"],
   },
   createdAt: {
     type: Date,
