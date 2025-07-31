@@ -149,6 +149,9 @@ const createSalesAgent = async (data) => {
 
 app.post("/sales-agents", async (req, res) => {
   try {
+    if (!req.body.name || !req.body.email) {
+  return res.status(400).json({ error: "Name and Email are required." });
+}
     const newAgent = await createSalesAgent(req.body);
     res.status(201).json({
       message: "Sales Agent added to database.",
@@ -163,7 +166,7 @@ app.post("/sales-agents", async (req, res) => {
 // --- Get All Sales Agents ---
 app.get("/sales-agents", async (req, res) => {
   try {
-    const agents = await SalesAgent.find({}, "_id name");
+    const agents = await SalesAgent.find({}, "_id name email");
     res.status(200).json(agents);
   } catch (err) {
     console.error("Error fetching sales agents:", err);
