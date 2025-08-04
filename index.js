@@ -280,6 +280,95 @@ app.get("/leads/:id/comments", async (req, res) => {
 
 
 
+app.get("/report/summary", async (req, res) => {
+  try {
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+    const closedLastWeek = await Lead.countDocuments({
+      status: "Closed",
+      closedAt: { $gte: oneWeekAgo },
+    });
+
+    const pipelineLeads = await Lead.countDocuments({
+      status: { $ne: "Closed" },
+    });
+
+    res.status(200).json({
+      closedLastWeek,
+      pipelineLeads,
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch report summary" });
+  }
+});
+
+app.get("/report/by-agent", async (req, res) => {
+  try {
+    const data = await Lead.aggregate([
+      { $match: { status: "Closed" } },
+      {
+        $group: {
+          _id: "$salesAgent",
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $lookup: {
+          from: "salesagents",
+          localField: "_id",
+          foreignField: "_id",
+          as: "agentDetails",
+        },
+      },
+      { $unwind: "$agentDetails" },
+      {
+        $project: {
+          salesAgent: "$agentDetails.name",
+          count: 1,
+          _id: 0,
+        },
+      },
+    ]);
+
+    res.status(200).json(data);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch leads by agent" });
+  }
+});
+
+app.get("/report/status-distribution", async (req, res) => {
+  try {
+    const data = await Lead.aggregate([
+      {
+        $match: {
+          status: { $ne: "Closed" },
+        },
+      },
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+        },
+      },
+      {
+        $project: {
+          status: "$_id",
+          count: 1,
+          _id: 0,
+        },
+      },
+    ]);
+
+    res.status(200).json(data);
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch status distribution" });
+  }
+});
+
+
+
+
 app.get("/", (req, res) => {
   res.send("Lead Management API is running");
 });
