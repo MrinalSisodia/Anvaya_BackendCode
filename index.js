@@ -97,16 +97,26 @@ app.put("/leads/:id", validateLeadInput, async (req, res) => {
   }
 
   try {
-    const updatedLead = await Lead.findByIdAndUpdate(id, req.body, {
-      new: true,
-      runValidators: true,
-    }).populate("salesAgent", "_id name");
-
-    if (!updatedLead) {
+    const leadBeforeUpdate = await Lead.findById(id);
+    if (!leadBeforeUpdate) {
       return res
         .status(404)
         .json({ error: `Lead with ID '${id}' not found.` });
     }
+
+    const wasClosedBefore = leadBeforeUpdate.status === "Closed";
+    const willBeClosedNow = req.body.status === "Closed";
+
+    const updateData = {
+      ...req.body,
+      // Only set closedAt if lead is *becoming* Closed (and wasn't before)
+      ...(willBeClosedNow && !wasClosedBefore && { closedAt: new Date() }),
+    };
+
+    const updatedLead = await Lead.findByIdAndUpdate(id, updateData, {
+      new: true,
+      runValidators: true,
+    }).populate("salesAgent", "_id name");
 
     res.status(200).json(updatedLead);
   } catch (err) {
@@ -114,6 +124,7 @@ app.put("/leads/:id", validateLeadInput, async (req, res) => {
     res.status(500).json({ error: "Failed to update lead." });
   }
 });
+
 
 // --- Delete Lead ---
 app.delete("/leads/:id", async (req, res) => {
