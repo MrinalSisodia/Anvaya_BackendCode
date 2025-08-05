@@ -318,6 +318,7 @@ app.get("/report/by-agent", async (req, res) => {
   try {
     const data = await Lead.aggregate([
       { $match: { status: "Closed" } },
+      { $unwind: "$salesAgent" }, // Flatten salesAgent array
       {
         $group: {
           _id: "$salesAgent",
@@ -347,6 +348,7 @@ app.get("/report/by-agent", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch leads by agent" });
   }
 });
+
 
 app.get("/report/status-distribution", async (req, res) => {
   try {
