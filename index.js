@@ -174,6 +174,29 @@ app.post("/sales-agents", async (req, res) => {
   }
 });
 
+// DELETE /sales-agents/:id
+app.delete("/sales-agents/:id", async (req, res) => {
+  const { id } = req.params;
+
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ error: "'id' must be a valid Sales Agent Id" });
+  }
+
+  try {
+    const deletedAgent = await SalesAgent.findByIdAndDelete(id);
+
+    if (!deletedAgent) {
+      return res.status(404).json({ error: `Sales Agent with ID '${id}' not found.` });
+    }
+
+    res.status(200).json({ message: "Sales Agent deleted successfully." });
+  } catch (err) {
+    console.error("Error deleting sales agent:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
 // --- Get All Sales Agents ---
 app.get("/sales-agents", async (req, res) => {
   try {
